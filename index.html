@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ElectraLearn — WiFi Multiplayer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<style>
+/* CSS remains identical to your original code */
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;700;900&family=Orbitron:wght@400;700;900&display=swap');
+:root{
+  --bg:#06080e;--panel:#0e1520;--panel2:#141d2e;--border:#1a2d48;
+  --accent:#00d4ff;--a2:#ff5500;--gold:#ffd700;--green:#00ff88;
+  --red:#ff2255;--purple:#c084fc;--text:#ddeeff;--muted:#4a6a8a;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Exo 2',sans-serif;min-height:100vh;overflow-x:hidden;
+  background-image:radial-gradient(ellipse at 15% 40%,rgba(0,100,160,.12) 0%,transparent 60%),
+  repeating-linear-gradient(0deg,transparent,transparent 39px,rgba(0,212,255,.022) 40px);}
+
+header{padding:12px 24px;display:flex;align-items:center;justify-content:space-between;
+  border-bottom:1px solid var(--border);background:rgba(6,8,14,.97);position:sticky;top:0;z-index:200;}
+.logo{font-family:'Orbitron',monospace;font-size:1.2rem;font-weight:900;letter-spacing:3px}
+.logo span{color:var(--accent)}
+.logo small{display:block;font-size:.5rem;color:var(--muted);letter-spacing:4px;margin-top:1px}
+
+.screen{display:none;padding:24px;max-width:800px;margin:0 auto}
+.screen.active{display:block;animation:fadeUp .3s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+
+/* UI Elements */
+.card{background:var(--panel);border:2px solid var(--border);border-radius:14px;padding:22px;margin-bottom:15px}
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:12px 26px;border-radius:8px;border:none;font-weight:700;cursor:pointer;width:100%;font-family:inherit;}
+.btn-primary{background:linear-gradient(135deg,var(--accent),#0099bb);color:#000}
+.btn-secondary{background:var(--panel2);border:1px solid var(--border);color:var(--text)}
+
+.net-bar{display:flex;align-items:center;justify-content:center;gap:10px;padding:11px;border-radius:10px;margin-bottom:14px;font-size:.82rem;}
+.net-bar.connected{background:rgba(0,255,136,.07);border:1px solid rgba(0,255,136,.2);color:var(--green)}
+.net-bar.error{background:rgba(255,34,85,.07);border:1px solid rgba(255,34,85,.2);color:var(--red)}
+
+.share-url-box{background:var(--panel2);padding:10px;border-radius:8px;font-family:'Share Tech Mono';font-size:.7rem;color:var(--muted);word-break:break-all;border:1px solid var(--border)}
+#qrWrap{background:white;padding:10px;border-radius:10px;width:fit-content;margin:12px auto}
+
+.ans-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px}
+.ans-btn{background:var(--panel2);border:2px solid var(--border);color:#fff;padding:14px;border-radius:10px;cursor:pointer;font-family:'Share Tech Mono';font-size:1rem;font-weight:700;}
+.ans-btn.correct{background:rgba(0,255,136,.12);border-color:var(--green);color:var(--green)}
+.ans-btn.wrong{background:rgba(255,34,85,.12);border-color:var(--red);color:var(--red)}
+
+.lb-row{display:flex;justify-content:space-between;padding:10px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;margin-bottom:5px;}
+</style>
+</head>
+<body>
+
+<header><div class="logo">ELECTRA<span>LEARN</span><small>WiFi Multiplayer</small></div></header>
+
+<div class="screen active" id="lobby">
+  <div class="card" onclick="startSolo()" style="cursor:pointer; text-align:center;">
+    <h3 style="color:var(--accent)">🎮 SOLO PRACTICE</h3>
+  </div>
+  <div class="card" onclick="showScreen('setup')" style="cursor:pointer; text-align:center;">
+    <h3 style="color:var(--accent)">📡 HOST MULTIPLAYER</h3>
+  </div>
+  <div class="card">
+    <label style="font-size: 0.7rem; color: var(--muted)">YOUR NAME</label>
+    <input id="joinName" placeholder="Enter name" style="width:100%; padding:10px; margin: 10px 0; background: #000; color: #fff; border: 1px solid var(--border)">
+    <button class="btn btn-primary" onclick="joinRoom()">JOIN USING LINK</button>
+  </div>
+</div>
+
+<div class="screen" id="setup">
+  <div class="card">
+    <h3>HOST SETTINGS</h3>
+    <input id="hostName" placeholder="Instructor Name" style="width:100%; padding:10px; margin: 10px 0; background: #000; color: #fff; border: 1px solid var(--border)">
+    <button class="btn btn-primary" onclick="createRoom()">CREATE ROOM</button>
+    <button class="btn btn-secondary" onclick="location.reload()" style="margin-top:10px">CANCEL</button>
+  </div>
+</div>
+
+<div class="screen" id="waiting">
+  <div class="net-bar connected" id="netStatus">Initialising Room...</div>
+  <div class="card" style="text-align:center">
+    <div class="share-url-box" id="shareUrl">Generating...</div>
+    <div id="qrWrap"></div>
+    <div id="playerList" style="text-align:left; margin-top:15px"></div>
+    <button class="btn btn-primary" id="startBtn" style="display:none; margin-top:20px" onclick="hostStart()">START GAME</button>
+  </div>
+</div>
+
+<div class="screen" id="game">
+  <div class="card" style="text-align:center">
+    <div id="qCount" style="font-size:.7rem; color:var(--muted); margin-bottom:10px;">Question 1/5</div>
+    <h3 id="qTitle">Identify Value</h3>
+    <div class="ans-grid" id="ansGrid"></div>
+  </div>
+</div>
+
+<div class="screen" id="results">
+  <div class="card" style="text-align:center">
+    <h2 style="color:var(--gold); font-family:'Orbitron';">GAME OVER</h2>
+    <div id="finalLB"></div>
+    <button class="btn btn-secondary" onclick="location.reload()" style="margin-top:20px">QUIT TO LOBBY</button>
+  </div>
+</div>
+
+<script>
+const COLORS = [
+    {n:'Black',h:'#000',v:0}, {n:'Brown',h:'#8B4513',v:1}, {n:'Red',h:'#FF0000',v:2},
+    {n:'Orange',h:'#FFA500',v:3}, {n:'Yellow',h:'#FFFF00',v:4}, {n:'Green',h:'#008000',v:5},
+    {n:'Blue',h:'#0000FF',v:6}, {n:'Violet',h:'#EE82EE',v:7}, {n:'Grey',h:'#808080',v:8}, {n:'White',h:'#FFFFFF',v:9}
+];
+
+let peer=null, hostConn=null, guestConns=[], isHost=false, players={}, questions=[], curIdx=0, myName='';
+
+function showScreen(id){ 
+    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+}
+
+function updatePlayerUI(){
+    document.getElementById('playerList').innerHTML = "<b>Students Joined:</b> " + Object.values(players).join(", ");
+}
+
+// NETWORK CONFIG: This is the fix for Mobile Hotspots
+const peerConfig = {
+    secure: true,
+    debug: 2,
+    config: {
+        'iceServers': [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' }
+        ]
+    }
+};
+
+// HOST LOGIC
+function createRoom(){
+    myName = document.getElementById('hostName').value || "Instructor";
+    isHost=true; showScreen('waiting');
+    peer = new Peer(null, peerConfig);
+    peer.on('open', (id)=>{
+        document.getElementById('netStatus').innerText="Room Online";
+        const url = window.location.origin + window.location.pathname + '#' + id;
+        document.getElementById('shareUrl').innerText = url;
+        new QRCode(document.getElementById('qrWrap'), {text: url, width:140, height:140});
+        document.getElementById('startBtn').style.display='block';
+        players[id] = myName; updatePlayerUI();
+    });
+    peer.on('connection', (c)=>{
+        guestConns.push(c);
+        c.on('data', (d)=>{
+            if(d.type==='join'){ players[c.peer]=d.name; updatePlayerUI(); broadcast({type:'sync', players}); }
+        });
+    });
+}
+
+// JOIN LOGIC
+function joinRoom(){
+    const hash = window.location.hash.replace('#','');
+    if(!hash) return alert("Please scan the QR code on the Host laptop.");
+    myName = document.getElementById('joinName').value || "Student";
+    showScreen('waiting');
+    peer = new Peer(null, peerConfig);
+    peer.on('open', (id)=>{
+        hostConn = peer.connect(hash, { reliable: true });
+        hostConn.on('open', ()=>{
+            document.getElementById('netStatus').innerText="Connected to Host";
+            hostConn.send({type:'join', name: myName});
+        });
+        hostConn.on('data', (d)=>{
+            if(d.type==='sync'){ players=d.players; updatePlayerUI(); }
+            if(d.type==='start'){ questions=d.qs; curIdx=0; showScreen('game'); renderQ(); }
+            if(d.type==='end'){ showResults(); }
+        });
+    });
+}
+
+// SOLO LOGIC
+function startSolo(){
+    questions = generateQs(); curIdx=0; showScreen('game'); renderQ();
+}
+
+function generateQs(){
+    let qs = [];
+    for(let i=0; i<5; i++){
+        let c = COLORS[Math.floor(Math.random()*10)];
+        qs.push({q:`Identify ${c.n.toUpperCase()} value:`, a:c.v, opts:[c.v, (c.v+1)%10, (c.v+2)%10, (c.v+3)%10].sort(()=>Math.random()-.5)});
+    }
+    return qs;
+}
+
+function hostStart(){
+    questions = generateQs();
+    broadcast({type:'start', qs: questions});
+    curIdx=0; showScreen('game'); renderQ();
+}
+
+function renderQ(){
+    const q = questions[curIdx];
+    document.getElementById('qCount').innerText = `Question ${curIdx+1}/5`;
+    document.getElementById('qTitle').innerText = q.q;
+    const grid = document.getElementById('ansGrid'); grid.innerHTML = "";
+    q.opts.forEach(opt => {
+        const b = document.createElement('button'); b.className='ans-btn'; b.innerText=opt;
+        b.onclick = ()=>{
+            if(opt === q.a){
+                b.classList.add('correct');
+                setTimeout(()=>{
+                    curIdx++; 
+                    if(curIdx < 5) renderQ(); 
+                    else { if(isHost) { broadcast({type:'end'}); showResults(); } else showResults(); }
+                }, 800);
+            } else b.classList.add('wrong');
+        };
+        grid.appendChild(b);
+    });
+}
+
+function showResults(){
+    showScreen('results');
+    const lb = document.getElementById('finalLB'); lb.innerHTML = "";
+    Object.keys(players).forEach(id => {
+        lb.innerHTML += `<div class="lb-row"><span>${players[id]}</span><span style="color:var(--accent)">FINISHED</span></div>`;
+    });
+}
+
+function broadcast(d){ guestConns.forEach(c=>{ if(c.open) c.send(d); }); }
+</script>
+</body>
+</html>
