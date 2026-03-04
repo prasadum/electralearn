@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ElectraLearn — WiFi Multiplayer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;700;900&family=Orbitron:wght@400;700;900&display=swap');
+:root{
+  --bg:#06080e;--panel:#0e1520;--panel2:#141d2e;--border:#1a2d48;
+  --accent:#00d4ff;--a2:#ff5500;--gold:#ffd700;--green:#00ff88;
+  --red:#ff2255;--purple:#c084fc;--text:#ddeeff;--muted:#4a6a8a;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Exo 2',sans-serif;min-height:100vh;overflow-x:hidden;
+  background-image:radial-gradient(ellipse at 15% 40%,rgba(0,100,160,.12) 0%,transparent 60%),
+  repeating-linear-gradient(0deg,transparent,transparent 39px,rgba(0,212,255,.022) 40px);}
+
+header{padding:12px 24px;display:flex;align-items:center;justify-content:space-between;
+  border-bottom:1px solid var(--border);background:rgba(6,8,14,.97);
+  position:sticky;top:0;z-index:200;backdrop-filter:blur(10px);}
+.logo{font-family:'Orbitron',monospace;font-size:1.2rem;font-weight:900;letter-spacing:3px}
+.logo span{color:var(--accent)}
+.hud{display:flex;gap:8px;align-items:center;}
+.pill{background:var(--panel2);border:1px solid var(--border);padding:4px 12px;border-radius:20px;font-family:'Share Tech Mono';font-size:.75rem;}
+
+.screen{display:none;padding:24px;max-width:800px;margin:0 auto}
+.screen.active{display:block;animation:fadeUp .3s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+
+/* LOBBY */
+#lobby{min-height:calc(100vh - 110px);display:none;flex-direction:column;align-items:center;justify-content:center;}
+#lobby.active{display:flex}
+.lobby-hero{text-align:center;margin-bottom:32px}
+.lobby-hero h1{font-family:'Orbitron',monospace;font-size:2rem;font-weight:900;line-height:1.1}
+.lobby-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;width:100%;max-width:540px;margin-bottom:24px}
+.lcard{background:var(--panel);border:2px solid var(--border);border-radius:14px;padding:22px 18px;cursor:pointer;transition:.2s;text-align:center;}
+.lcard:hover{border-color:var(--accent);transform:translateY(-3px);box-shadow:0 8px 28px rgba(0,212,255,.1)}
+.lcard h3{font-family:'Orbitron',monospace;font-size:.8rem;font-weight:700;color:var(--accent);margin-bottom:5px}
+
+.join-box{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:24px;width:100%;max-width:540px}
+.field{margin-bottom:13px}
+.field label{display:block;font-size:.68rem;color:var(--muted);text-transform:uppercase;margin-bottom:5px}
+.field input{width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:12px;border-radius:8px;font-family:'Share Tech Mono';outline:none}
+.code-input{text-transform:uppercase;letter-spacing:4px;font-size:1.3rem!important;text-align:center}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 26px;border-radius:8px;border:none;font-weight:700;cursor:pointer;width:100%;font-family:inherit;}
+.btn-primary{background:linear-gradient(135deg,var(--accent),#0099bb);color:#000}
+
+/* WAITING ROOM */
+.net-bar{display:flex;align-items:center;justify-content:center;padding:12px;border-radius:10px;margin-bottom:14px;font-size:.82rem;background:rgba(0,255,136,.1);border:1px solid var(--green);color:var(--green)}
+.room-code-display{font-family:'Orbitron',monospace;font-size:2.8rem;font-weight:900;color:var(--accent);letter-spacing:8px;text-align:center;margin:15px 0}
+#qrWrap{background:white;padding:10px;border-radius:10px;width:fit-content;margin:12px auto}
+
+/* GAME */
+.game-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;}
+.g-prog-bg{flex:1;height:6px;background:var(--panel2);margin:0 15px;border-radius:3px;overflow:hidden}
+.g-prog-fill{height:100%;background:var(--accent);width:0%;transition:0.3s;}
+.ans-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px}
+.ans-btn{background:var(--panel2);border:2px solid var(--border);color:#fff;padding:16px;border-radius:10px;cursor:pointer;font-family:'Share Tech Mono';font-size:1.1rem;font-weight:700;}
+.ans-btn.correct{background:var(--green);color:#000;border-color:var(--green)}
+.ans-btn.wrong{background:var(--red);color:#fff;border-color:var(--red)}
+
+.lb-panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px;margin-top:20px}
+.lb-row{display:flex;justify-content:space-between;padding:10px;border-bottom:1px solid var(--border)}
+
+/* SMD */
+.smd-chip{width:80px;height:50px;background:linear-gradient(135deg,#2a2a2a,#161616);border-radius:5px;display:flex;align-items:center;justify-content:center;font-family:'Share Tech Mono';font-size:1.1rem;font-weight:700;color:#fff;border:1px solid #444;position:relative;margin:auto}
+</style>
+</head>
+<body>
+
+<header><div class="logo">ELECTRA<span>LEARN</span></div>
+  <div class="hud"><div class="pill">🏆 <span id="dispScore">0</span></div></div>
+</header>
+
+<div id="toast"></div>
+
+<div class="screen active" id="lobby">
+  <div class="lobby-hero"><h1>COMPONENT<br><span>CODE BATTLE</span></h1></div>
+  <div class="lobby-grid">
+    <div class="lcard" onclick="startSolo()"><h3>🎮 SOLO PRACTICE</h3></div>
+    <div class="lcard" onclick="showScreen('setup')"><h3>📡 HOST WiFi GAME</h3></div>
+  </div>
+  <div class="join-box">
+    <div class="field"><label>Your Name</label><input id="joinName" placeholder="Enter name"></div>
+    <div class="field"><label>Enter 6-Char Code</label>
+      <input id="joinCode" class="code-input" placeholder="ABC123" maxlength="6" oninput="this.value=this.value.toUpperCase()">
+    </div>
+    <button class="btn btn-primary" onclick="joinRoom()">JOIN GAME →</button>
+  </div>
+</div>
+
+<div class="screen" id="setup">
+  <div class="lcard" style="max-width:400px; margin:auto">
+    <h3>HOST SETTINGS</h3>
+    <div class="field"><label>Instructor Name</label><input id="hostName" placeholder="Instructor"></div>
+    <button class="btn btn-primary" onclick="createRoom()">CREATE ROOM</button>
+    <button class="btn" style="color:var(--muted); margin-top:10px" onclick="showScreen('lobby')">BACK</button>
+  </div>
+</div>
+
+<div class="screen" id="waiting">
+  <div class="net-bar" id="netStatus">Room Online</div>
+  <div class="room-code-display" id="dispCode">------</div>
+  <div id="qrWrap"></div>
+  <div id="playerList" style="margin:20px 0; font-family:'Share Tech Mono'"></div>
+  <button class="btn btn-primary" id="startBtn" style="display:none" onclick="hostStart()">START GAME</button>
+</div>
+
+<div class="screen" id="game">
+  <div class="game-top">
+    <span id="qCount">Q 1/5</span>
+    <div class="g-prog-bg"><div class="g-prog-fill" id="gBar"></div></div>
+  </div>
+  <div class="lcard">
+    <h3 id="qTitle" style="margin-bottom:20px">Identify Value</h3>
+    <div id="compArea" style="min-height:80px; display:flex; align-items:center; justify-content:center;"></div>
+    <div class="ans-grid" id="ansGrid"></div>
+  </div>
+  <div class="lb-panel"><h3>Live Leaderboard</h3><div id="lbRows"></div></div>
+</div>
+
+<div class="screen" id="final">
+  <h1 style="color:var(--gold); font-family:'Orbitron'; text-align:center">🏆 FINAL STANDINGS</h1>
+  <div id="finalLB" style="margin:20px 0"></div>
+  <button class="btn btn-primary" onclick="location.reload()">QUIT TO LOBBY</button>
+</div>
+
+<script>
+const COLORS = [{n:'Black',h:'#111',v:0},{n:'Brown',h:'#8B4513',v:1},{n:'Red',h:'#F00',v:2},{n:'Orange',h:'#F80',v:3},{n:'Yellow',h:'#FF0',v:4},{n:'Green',h:'#080',v:5},{n:'Blue',h:'#04C',v:6},{n:'Violet',h:'#60B',v:7},{n:'Grey',h:'#777',v:8},{n:'White',h:'#CCC',v:9}];
+let peer=null, hostConn=null, guestConns=[], isHost=false, players={}, scores={}, questions=[], curIdx=0, myName='', answered=false;
+
+const pConfig = { secure: true, debug: 1, config: { 'iceServers': [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] } };
+
+function showScreen(id){ document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active')); document.getElementById(id).classList.add('active'); }
+
+function createRoom(){
+  myName = document.getElementById('hostName').value || "Host"; isHost=true; showScreen('waiting');
+  const roomCode = Math.random().toString(36).substring(2,8).toUpperCase();
+  document.getElementById('dispCode').innerText = roomCode;
+  peer = new Peer('el-room-'+roomCode, pConfig);
+  peer.on('open', (id)=>{
+    new QRCode(document.getElementById('qrWrap'), {text: window.location.href.split('#')[0] + '#' + roomCode, width:140, height:140});
+    document.getElementById('startBtn').style.display='block';
+    players[peer.id] = myName; scores[peer.id] = 0; updatePList();
+  });
+  peer.on('connection', (c)=>{
+    guestConns.push(c);
+    c.on('data', (d)=>{
+      if(d.type==='join'){ players[c.peer]=d.name; scores[c.peer]=0; updatePList(); broadcast({type:'sync', players, scores}); }
+      if(d.type==='ans'){ scores[d.id]+=10; broadcast({type:'sync', players, scores}); updatePList(); }
+    });
+  });
+}
+
+function joinRoom(){
+  const code = document.getElementById('joinCode').value || window.location.hash.replace('#','');
+  if(code.length < 6) return alert("Enter 6-char code");
+  myName = document.getElementById('joinName').value || "Player";
+  showScreen('waiting');
+  document.getElementById('netStatus').innerText = "Connecting...";
+  peer = new Peer(null, pConfig);
+  peer.on('open', (id)=>{
+    hostConn = peer.connect('el-room-'+code, { reliable: true });
+    hostConn.on('open', ()=>{ hostConn.send({type:'join', name: myName}); });
+    hostConn.on('data', (d)=>{
+      if(d.type==='sync'){ players=d.players; scores=d.scores; updatePList(); }
+      if(d.type==='start'){ questions=d.qs; curIdx=0; showScreen('game'); renderQ(); }
+      if(d.type==='end'){ showResults(); }
+    });
+  });
+}
+
+function startSolo(){ questions = genQs(); curIdx=0; showScreen('game'); renderQ(); }
+function hostStart(){ questions = genQs(); broadcast({type:'start', qs: questions}); curIdx=0; showScreen('game'); renderQ(); }
+
+function genQs(){
+  let qs = [];
+  for(let i=0; i<5; i++){
+    let c = COLORS[Math.floor(Math.random()*10)];
+    qs.push({q:c.n.toUpperCase(), a:c.v, opts:[c.v, (c.v+1)%10, (c.v+2)%10, (c.v+3)%10].sort(()=>Math.random()-.5), hex:c.h});
+  }
+  return qs;
+}
+
+function renderQ(){
+  answered = false;
+  const q = questions[curIdx]; 
+  document.getElementById('qCount').innerText = `Q ${curIdx+1}/5`;
+  document.getElementById('gBar').style.width = ((curIdx/5)*100) + '%';
+  document.getElementById('qTitle').innerText = `What digit is ${q.q}?`;
+  document.getElementById('compArea').innerHTML = `<div style="width:80px;height:80px;background:${q.hex};border-radius:10px;box-shadow:0 0 20px ${q.hex}44"></div>`;
+  
+  const grid = document.getElementById('ansGrid'); grid.innerHTML = "";
+  q.opts.forEach(opt => {
+    const b = document.createElement('button'); b.className='ans-btn'; b.innerText=opt;
+    b.onclick = ()=>{
+      if(answered) return;
+      answered = true;
+      // Disable all buttons immediately
+      document.querySelectorAll('.ans-btn').forEach(btn => btn.style.pointerEvents = 'none');
+      
+      if(opt === q.a){
+        b.classList.add('correct');
+        const s = parseInt(document.getElementById('dispScore').innerText);
+        document.getElementById('dispScore').innerText = s + 10;
+        setTimeout(()=>{
+          curIdx++; if(curIdx<5) renderQ(); else { if(isHost) { broadcast({type:'end'}); showResults(); } else if(hostConn) { hostConn.send({type:'ans', id:peer.id}); showResults(); } else showResults(); }
+        }, 800);
+      } else {
+        b.classList.add('wrong');
+        setTimeout(()=> { b.classList.remove('wrong'); answered=false; document.querySelectorAll('.ans-btn').forEach(btn => btn.style.pointerEvents = 'auto'); }, 500);
+      }
+    };
+    grid.appendChild(b);
+  });
+}
+
+function showResults(){
+  showScreen('final');
+  const lb = document.getElementById('finalLB'); lb.innerHTML = "";
+  Object.keys(players).forEach(id => { lb.innerHTML += `<div class="lb-row"><span>${players[id]}</span><span>${scores[id]||0} Pts</span></div>`; });
+}
+
+function updatePList(){
+  document.getElementById('playerList').innerHTML = "<b>Joined:</b> " + Object.values(players).join(", ");
+  const rows = document.getElementById('lbRows'); rows.innerHTML = "";
+  Object.keys(players).forEach(id => { rows.innerHTML += `<div class="lb-row"><span>${players[id]}</span><span>${scores[id]||0}</span></div>`; });
+}
+function broadcast(d){ guestConns.forEach(c=>{ if(c.open) c.send(d); }); }
+window.onload = () => { if(window.location.hash) document.getElementById('joinCode').value = window.location.hash.replace('#',''); };
+</script>
+</body>
+</html>
